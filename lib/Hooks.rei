@@ -84,4 +84,5 @@ let effect:
   t('b, unit, 'c, 'd);
 
 let executeEffects: (~lifecycle: Effect.lifecycle, state('a, unit)) => bool;
-let flushPendingStateUpdates: state('a, unit) => bool;
+
+let flushPendingStateUpdates: state('a, unit) => state('a, unit);

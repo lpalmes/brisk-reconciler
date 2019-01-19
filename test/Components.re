@@ -213,11 +213,12 @@ module ToggleClicks = {
   let make = (~rAction, _children) =>
     component(hooks => {
       let (state, dispatch, hooks) =
-        Hooks.reducer(~initialState=false, (Click, state) => !state, hooks);
+        Hooks.reducer(~initialState=false, (Click, state) => {print_endline("reducer"); !state}, hooks);
+      print_endline(string_of_bool(state));
       let hooks =
         Hooks.effect(
           OnMount,
-          () => Some(RemoteAction.subscribe(~handler=dispatch, rAction)),
+          () => {print_endline("subscribe"); Some(RemoteAction.subscribe(~handler=(a) => {print_endline("action"); dispatch(a)}, rAction))},
           hooks,
         );
       (

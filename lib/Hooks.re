@@ -277,21 +277,23 @@ let executeEffects = (~lifecycle, hooks) => {
   };
 };
 
-let flushPendingStateUpdates = hooks =>
-  switch (hooks) {
+let flushPendingStateUpdates = state =>
+  switch (state) {
   | Some(hooks) =>
-    HeterogenousList.map(
-      {
-        f: (type a, hook: hook(a)) => {
-          switch (hook) {
-          | Reducer.Reducer(s) => (Reducer.flush(s): option(a))
-          | State.State(s) => (State.flush(s): option(a))
-          | _ => None
-          };
+    let nextHooks =
+      HeterogenousList.map(
+        {
+          f: (type a, hook: hook(a)) => {
+            switch (hook) {
+            | Reducer.Reducer(s) => (Reducer.flush(s): option(a))
+            | State.State(s) => (State.flush(s): option(a))
+            | _ => None
+            };
+          },
         },
-      },
-      hooks,
-    )
-    |> HeterogenousList.compareElementsIdentity(hooks) == false
-  | None => false
+        hooks,
+      );
+    HeterogenousList.compareElementsIdentity(hooks, nextHooks)
+      ? state : Some(nextHooks);
+  | None => None
   };

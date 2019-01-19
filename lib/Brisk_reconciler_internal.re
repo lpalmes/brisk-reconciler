@@ -47,9 +47,9 @@ module Make = (OutputTree: OutputTree) => {
     | UpdatedNode(OutputTree.node, OutputTree.node);
   type outputNodeContainer = Lazy.t(internalOutputNode);
   type outputNodeGroup = list(outputNodeContainer);
-  type instance('slots, 'nextSlots, 'elementType, 'outputNode) = {
-    slots: Hooks.t('slots, 'nextSlots),
-    component: component('slots, 'nextSlots, 'elementType, 'outputNode),
+  type instance('a, 'b, 'elementType, 'outputNode) = {
+    slots: Hooks.state('a, unit),
+    component: component('a, 'b, 'elementType, 'outputNode),
     element,
     instanceSubForest: instanceForest,
     subElements: 'elementType,
@@ -88,7 +88,9 @@ module Make = (OutputTree: OutputTree) => {
     elementType: elementType('slots, 'nextSlots, 'elementType, 'outputNode),
     handedOffInstance:
       ref(option(instance('slots, 'nextSlots, 'elementType, 'outputNode))),
-    render: Hooks.t('slots, 'nextSlots) => 'elementType,
+    render:
+      Hooks.t('slots, unit, 'nextSlots, 'nextSlots) =>
+      (Hooks.t(unit, unit, 'slots, unit), 'elementType),
   }
   and opaqueInstance =
     | Instance(instance('slots, 'nextSlots, 'elementType, 'outputNode))
@@ -492,8 +494,12 @@ module Make = (OutputTree: OutputTree) => {
     let rec ofElement =
             (Element(component) as element)
             : (opaqueInstance, list(unit => unit)) => {
-      let slots = Hooks.create(~onSlotsDidChange=OutputTree.markAsStale);
-      let subElements = component.render(slots);
+      let slots = Hooks.createState();
+      let (slots, subElements) =
+        component.render(
+          Hooks.ofState(slots, ~onStateDidChange=OutputTree.markAsStale),
+        );
+      let slots = Hooks.toState(slots);
       let (instanceSubForest, mountEffects) =
         (
           switch (component.elementType) {
@@ -769,10 +775,25 @@ module Make = (OutputTree: OutputTree) => {
 
         let shouldRerender = stateChanged || nextElement !== instance.element;
 
-        let nextSubElements =
-          shouldRerender
-            ? nextComponent.render(updatedInstanceWithNewElement.slots)
-            : instance.subElements;
+        let (nextSlots, nextSubElements) =
+          if (shouldRerender) {
+            let (nextSlots, nextElement) =
+              nextComponent.render(
+                Hooks.ofState(
+                  updatedInstanceWithNewElement.slots,
+                  ~onStateDidChange=OutputTree.markAsStale,
+                ),
+              );
+            (Hooks.toState(nextSlots), nextElement);
+          } else {
+            (instance.slots, instance.subElements);
+          };
+
+        let updatedInstanceWithNewElement = {
+          ...updatedInstanceWithNewElement,
+          slots: nextSlots,
+        };
+
         let {subElements, instanceSubForest} = updatedInstanceWithNewElement;
         let (
           nearestHostOutputNode,

@@ -95,17 +95,9 @@ module Make:
         ~useDynamicKey: bool=?,
         string,
         Hooks.t('a, unit, 'b, 'b) =>
-        (
-          Hooks.t(unit, unit, 'a, unit),
-          outputTreeElement('a, 'b),
-        )
+        (Hooks.t(unit, unit, 'a, unit), outputTreeElement('a, 'b))
       ) =>
-      component(
-        'a,
-        'b,
-        outputTreeElement('a, 'b),
-        outputNodeContainer,
-      );
+      component('a, 'b, outputTreeElement('a, 'b), outputNodeContainer);
 
     module Slots = Slots;
     module Hooks = Hooks;

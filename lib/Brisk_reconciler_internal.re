@@ -47,6 +47,7 @@ module Make = (OutputTree: OutputTree) => {
     | UpdatedNode(OutputTree.node, OutputTree.node);
   type outputNodeContainer = Lazy.t(internalOutputNode);
   type outputNodeGroup = list(outputNodeContainer);
+  type id('a) = ..;
   type instance('a, 'b, 'elementType, 'outputNode) = {
     slots: Hooks.state('a, unit),
     component: component('a, 'b, 'elementType, 'outputNode),
@@ -86,10 +87,18 @@ module Make = (OutputTree: OutputTree) => {
   and component('slots, 'nextSlots, 'elementType, 'outputNode) = {
     key: int,
     elementType: elementType('slots, 'nextSlots, 'elementType, 'outputNode),
-    handedOffInstance:
-      ref(option(instance('slots, 'nextSlots, 'elementType, 'outputNode))),
+    id: id(instance('slots, 'nextSlots, 'elementType, 'outputNode)),
+    eq:
+      'a.
+      (
+        'a,
+        id('a),
+        id(instance('slots, 'nextSlots, 'elementType, 'outputNode))
+      ) =>
+      option(instance('slots, 'nextSlots, 'elementType, 'outputNode)),
+
     render:
-      Hooks.t('slots, unit, 'nextSlots, 'nextSlots) =>
+      (Hooks.t('slots, unit, 'nextSlots, 'nextSlots), unit) =>
       (Hooks.t(unit, unit, 'slots, unit), 'elementType),
   }
   and opaqueInstance =
@@ -498,6 +507,7 @@ module Make = (OutputTree: OutputTree) => {
       let (slots, subElements) =
         component.render(
           Hooks.ofState(slots, ~onStateDidChange=OutputTree.markAsStale),
+          (),
         );
       let slots = Hooks.toState(slots);
       let (instanceSubForest, mountEffects) =
@@ -642,15 +652,14 @@ module Make = (OutputTree: OutputTree) => {
         };
       } else {
         let {component} = instance;
+        /*
         component.handedOffInstance := Some({...instance, slots: nextState});
-        switch (nextComponent.handedOffInstance^) {
+        */
+        switch (nextComponent.eq(instance, component.id, nextComponent.id)) {
         /*
          * Case A: The next element *is* of the same component class.
          */
         | Some(handedInstance) =>
-          /* DO NOT FORGET TO RESET HANDEDOFFINSTANCE */
-          component.handedOffInstance := None;
-
           let {
                 nearestHostOutputNode,
                 opaqueInstance: newOpaqueInstance,
@@ -682,8 +691,6 @@ module Make = (OutputTree: OutputTree) => {
          * `nextComponentClass`.
          */
         | None =>
-          /* DO NOT FORGET TO RESET HANDEDOFFINSTANCE */
-          component.handedOffInstance := None;
           /**
            * ** Switching component type **
            */
@@ -778,6 +785,7 @@ module Make = (OutputTree: OutputTree) => {
                   updatedInstanceWithNewElement.slots,
                   ~onStateDidChange=OutputTree.markAsStale,
                 ),
+                (),
               );
             (Hooks.toState(nextSlots), nextElement);
           } else {
@@ -1444,28 +1452,73 @@ module Make = (OutputTree: OutputTree) => {
 
   let listToElement = l => Nested(l);
 
-  /* Temporary mechanism for keeping identity without the first class module */
-  let component = (~useDynamicKey=false, _debugName) => {
-    let handedOffInstance = ref(None);
-    render => {
-      elementType: React,
-      key: useDynamicKey ? Key.dynamicKeyMagicNumber : Key.none,
-      handedOffInstance,
-      render,
-    };
-  };
-
-  let nativeComponent = (~useDynamicKey=false, _debugName) => {
-    let handedOffInstance = ref(None);
-    render => {
-      elementType: Host,
-      key: useDynamicKey ? Key.dynamicKeyMagicNumber : Key.none,
-      handedOffInstance,
-      render,
-    };
-  };
-
   module Slots = Slots;
   module Hooks = Hooks;
   module RemoteAction = RemoteAction;
+
+  module type Component = {
+    type slots;
+    type nextSlots;
+    type render;
+    let render: Hooks.t(slots, unit, nextSlots, nextSlots) => render;
+    let createComponent:
+      (
+        (Hooks.t(slots, unit, nextSlots, nextSlots), unit) =>
+        (Hooks.t(unit, unit, slots, unit), syntheticElement)
+      ) =>
+      component(slots, nextSlots, syntheticElement, outputNodeGroup);
+  };
+
+  let component =
+      (
+        type render_,
+        type slots_,
+        type nextSlots_,
+        render: Hooks.t(slots_, unit, nextSlots_, nextSlots_) => render_,
+      )
+      : (module Component with
+           type render = render_ and
+           type slots = slots_ and
+           type nextSlots = nextSlots_) =>
+    (module
+     {
+       type slots = slots_;
+       type nextSlots = nextSlots_;
+       type render = render_;
+       type id('a) +=
+         | Id: id(
+                 instance(
+                   slots,
+                   nextSlots,
+                   syntheticElement,
+                   outputNodeGroup,
+                 ),
+               );
+       let eq:
+         type b.
+           (
+             b,
+             id(b),
+             id(
+               instance(slots, nextSlots, syntheticElement, outputNodeGroup),
+             )
+           ) =>
+           option(
+             instance(slots, nextSlots, syntheticElement, outputNodeGroup),
+           ) =
+         (instance, id1, id2) => {
+           switch (id1, id2) {
+           | (Id, Id) => Some(instance)
+           | (_, _) => None
+           };
+         };
+       let render = render;
+       let createComponent = render => {
+         key: Key.none,
+         elementType: React,
+         id: Id,
+         render,
+         eq,
+       };
+     });
 };

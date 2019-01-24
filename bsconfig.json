@@ -1,0 +1,11 @@
+{
+  "name": "brisk-reconciler",
+  "sources": {
+    "dir": "lib",
+    "subdirs": true
+  },
+  "suffix": ".bs.js",
+  "namespace": true,
+  "refmt": 3
+}
+
